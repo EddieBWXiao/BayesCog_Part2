@@ -1,3 +1,10 @@
+**Log of modifications from B.X.**
+In 08.comparing models
+1) also checked the bridge sampling approach; saw log(BF) similar to loo package results
+2) added comparing_models_model2_ppc.stan (doing this chapter's exercise)
+3) ran the model validation code (which compares two models side-by-side); will need to add participant-level validation (e.g., accuracy / lose-shift rate)
+4) tried parameter recovery: parameter_recovery_main_master.R; note that the "recovery" of 10 parameters in compare_models_main_master.R did not seem ideal; re-ran with own simulation code of 40 virtual participants, and had visually good recovery
+
 **Bayesian Statistics and Bayesian Cognitive Modeling (*BayesCog*), Part 2 <br />
 UKE, Hamburg (hybrid), 2023** <br />
 [Dr. Lei Zhang, University of Birmingham, UK](http://lei-zhang.net/)
