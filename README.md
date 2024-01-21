@@ -1,4 +1,5 @@
 **Log of modifications from B.X.**
+
 In 08.comparing models
 1) also checked the bridge sampling approach; saw log(BF) similar to loo package results
 2) added comparing_models_model2_ppc.stan (doing this chapter's exercise)
