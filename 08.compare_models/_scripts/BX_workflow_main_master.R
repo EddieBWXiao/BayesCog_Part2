@@ -6,7 +6,7 @@
 # l.zhang.13@bham.ac.uk
 
 # B.X. modifications: 
-# used own parameter ranges & simulations
+# this document may accidentally become my new workflow...
 
 # =============================================================================
 #### Construct Data #### 
@@ -88,8 +88,8 @@ for(i in 1:nSubjects){
 rstan_options(auto_write = TRUE)
 options(mc.cores = 4)
 
-modelFile1 <- '_scripts/comparing_models_model1.stan'  # simple RL model
-modelFile2 <- '_scripts/comparing_models_model2.stan'  # fictitious RL model
+modelFile1 <- '_scripts/comparing_models_model1_ppc.stan'  # simple RL model, with ppc, S-by-T loglik
+modelFile2 <- '_scripts/comparing_models_model2_ppc.stan'  # fictitious RL model, with ppc, S-by-T loglik
 
 nIter     <- 2000
 nChains   <- 4 
@@ -177,16 +177,90 @@ print(plot_dens_grp)
 # =============================================================================
 #### "parameter recovery"
 # =============================================================================
-
+source('_scripts/HDIofMCMC.R')
 #in this version, true parameters defined myself
 
 fitted.lr.indv<-rstan::extract(fit_winner, pars = 'lr')$lr
 fitted.lr.indv.mean<-colMeans(fitted.lr.indv)
+fitted.lr.indv.hdi <- apply(fitted.lr.indv, 2, HDIofMCMC) #bounds
 fitted.tau.indv<-rstan::extract(fit_winner, pars = 'tau')$tau
 fitted.tau.indv.mean<-colMeans(fitted.tau.indv)
+fitted.tau.indv.hdi <- apply(fitted.tau.indv, 2, HDIofMCMC) #lower bound
+
+
 plot(fitted.lr.indv.mean,lr.sim)+abline(coef = c(0,1))
 plot(fitted.tau.indv.mean,tau.sim)+abline(coef = c(0,1))
 
-#!! it worked !!
-# I was half-expecting there to be issues from shrinkage or something
+#more beautiful plots:
+recov = data.frame(lr.fit = fitted.lr.indv.mean,
+                   lr.sim = lr.sim,
+                   lr.fit.l = fitted.lr.indv.hdi[1,], #lower bound
+                   lr.fit.h = fitted.lr.indv.hdi[2,])
+g.recov <- ggplot(recov,aes(lr.sim,lr.fit))+
+    geom_point(alpha=0.5)+
+    geom_pointrange(aes(ymin=lr.fit.l, ymax=lr.fit.h),alpha=0.5)+
+    geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+    theme_classic()
+plot(g.recov)
+# =============================================================================
+#### Following this, I will do the model validation plots here
+# =============================================================================
 
+# trial-by-trial sequence; this is the "real data"
+y_trial_mean = colMeans(dataList$choice == 1) #proportion of choosing 1, for each ptp
+plot(1:nTrials, y_trial_mean,type='b') #quick check?
+
+#extract trial-by-trial predicted choice (4000 arrays of 1 & 2, repeated for each ptp each trial)
+y_pred_winner = extract(fit_winner, pars='y_pred')$y_pred
+y_pred_winner_mean_mcmc = apply(y_pred_winner==1, c(1,3), mean) 
+y_pred_winner_mean = colMeans(y_pred_winner_mean_mcmc) #mean choice on each trial
+y_pred_winner_mean_HDI = apply(y_pred_winner_mean_mcmc, 2, HDIofMCMC)
+
+#extract each participant's lose-shift rate
+calc_lose_shift<-function(choices,outcomes,loseCode=0){
+    shift <- diff(choices)!=0
+    islose <- outcomes==loseCode
+    islose<-islose[1:length(islose)-1] #get rid of end
+    lsrate = mean(shift[islose])
+    return(lsrate)   
+}
+calc_shift_rate<-function(choices){
+    shift <- diff(choices)!=0
+    rate = mean(shift)
+    return(rate)   
+}
+#alright I did not see this coming: need to regenerate the outcomes... let's do the shift rate first
+y_pred_winner_shiftrate = apply(y_pred_winner, c(1,2), calc_shift_rate) 
+y_pred_winner_shiftrate_mean = colMeans(y_pred_winner_shiftrate)
+data_shift_rate = apply(dataList$choice, 1, calc_shift_rate)
+plot(data_shift_rate,y_pred_winner_shiftrate_mean)
+#now try get the outcomes
+
+#combine to get data for plotting
+df = data.frame(Trial = 1:nTrials,
+                Data  = y_trial_mean,
+                model_mean = y_pred_winner_mean,
+                HDI_l = y_pred_winner_mean_HDI[1,],
+                HDI_h = y_pred_winner_mean_HDI[2,])
+
+#PLOTTING
+g1<-ggplot(df,aes(Trial,Data))+
+    geom_line(aes(color='Data'))+ #the data
+    geom_ribbon(aes(ymin= HDI_l, ymax= HDI_h, fill='model'), linetype=2, alpha=0.3)
+g1 <- g1 + theme_classic() + scale_fill_manual(name = '',  values=c("model" = "indianred3")) +
+    scale_color_manual(name = '',  values=c("Data" = "skyblue"))  +
+    labs(y = 'Choosing ref (%)')
+plot(g1)
+
+tt_y = mean(df$Data)
+df2 = data.frame(xx = c(rowMeans(y_pred_winner_mean_mcmc)) ,
+                 model = rep(c('model'),each=4000) ) # overall mean, 4000 mcmc samples
+g2 = ggplot(data=df2, aes(xx)) + 
+    geom_histogram(data=subset(df2, model == 'model'),fill = "indianred3", alpha = 0.5, binwidth =.005)
+g2 = g2 + geom_vline(xintercept=tt_y, color = 'skyblue2',size=1.5)
+g2 = g2 + labs(x = 'Choosing ref (%)', y = 'Frequency')
+g2 = g2 + theme_classic()
+g2 = g2 + theme(axis.text   = element_text(size=22),
+                axis.title  = element_text(size=25),
+                legend.text = element_text(size=25))
+plot(g2) #doesn't seem super-informative; since task volatile, near 50-50
